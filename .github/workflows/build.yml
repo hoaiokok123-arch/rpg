@@ -24,16 +24,20 @@ jobs:
             -destination 'generic/platform=iOS' \
             -configuration Release \
             -sdk iphoneos \
+            -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_IDENTITY="" \
-            SYMROOT=build \
             build
 
       - name: Create IPA manually
         run: |
           mkdir -p Payload
-          cp -r build/Release-iphoneos/RPGPlayer.app Payload/
+          APP_PATH="build/Build/Products/Release-iphoneos/RPGPlayer.app"
+          if [ ! -d "$APP_PATH" ]; then
+            APP_PATH="build/Release-iphoneos/RPGPlayer.app"
+          fi
+          cp -r "$APP_PATH" Payload/
           zip -r RPGPlayer.ipa Payload/
 
       - name: Upload RPGPlayer.ipa artifact

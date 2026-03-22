@@ -32,10 +32,18 @@ jobs:
 
       - name: Create IPA manually
         run: |
+          rm -rf Payload
           mkdir -p Payload
           APP_PATH="build/Build/Products/Release-iphoneos/RPGPlayer.app"
           if [ ! -d "$APP_PATH" ]; then
             APP_PATH="build/Release-iphoneos/RPGPlayer.app"
+          fi
+          EXECUTABLE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$APP_PATH/Info.plist")
+          if [ -z "$EXECUTABLE_NAME" ] || [ ! -f "$APP_PATH/$EXECUTABLE_NAME" ]; then
+            echo "Invalid app bundle: missing executable '$EXECUTABLE_NAME' in $APP_PATH"
+            /bin/ls -la "$APP_PATH"
+            /usr/libexec/PlistBuddy -c "Print" "$APP_PATH/Info.plist" || true
+            exit 1
           fi
           cp -r "$APP_PATH" Payload/
           zip -r RPGPlayer.ipa Payload/

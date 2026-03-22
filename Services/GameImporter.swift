@@ -1,5 +1,5 @@
 import Foundation
-import ZipArchive
+import ZIPFoundation
 
 enum GameImporterError: LocalizedError {
     case unzipFailed
@@ -32,11 +32,9 @@ enum GameImporter {
 
         try fileManager.createDirectory(at: destinationFolderURL, withIntermediateDirectories: true)
 
-        let didUnzip = SSZipArchive.unzipFile(
-            atPath: zipURL.path,
-            toDestination: destinationFolderURL.path
-        )
-        guard didUnzip else {
+        do {
+            try fileManager.unzipItem(at: zipURL, to: destinationFolderURL)
+        } catch {
             throw GameImporterError.unzipFailed
         }
 

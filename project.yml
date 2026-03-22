@@ -2,13 +2,13 @@ name: RPGPlayer
 
 options:
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "14.0"
   createIntermediateGroups: true
 
 packages:
-  ZipArchive:
-    url: https://github.com/ZipArchive/ZipArchive
-    from: 2.6.0
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation
+    from: 0.9.0
 
 targets:
   RPGPlayer:
@@ -23,7 +23,7 @@ targets:
       base:
         PRODUCT_NAME: RPGPlayer
         PRODUCT_BUNDLE_IDENTIFIER: com.hoai90213.rpgplayer
-        IPHONEOS_DEPLOYMENT_TARGET: 16.0
+        IPHONEOS_DEPLOYMENT_TARGET: 14.0
         SWIFT_VERSION: 5.0
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: Info.plist
@@ -34,5 +34,5 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 1.0
     dependencies:
-      - package: ZipArchive
-        product: ZipArchive
+      - package: ZIPFoundation
+        product: ZIPFoundation

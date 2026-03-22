@@ -15,7 +15,7 @@
 		A10000000000000000000035 /* GamePlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* GamePlayerView.swift */; };
 		A10000000000000000000036 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* LibraryView.swift */; };
 		A10000000000000000000037 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* SplashView.swift */; };
-		A10000000000000000000038 /* ZipArchive in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000061 /* ZipArchive */; };
+		A10000000000000000000038 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = A10000000000000000000061 /* ZIPFoundation */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,7 +36,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000000000000000000038 /* ZipArchive in Frameworks */,
+				A10000000000000000000038 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -108,7 +108,7 @@
 			);
 			name = RPGPlayer;
 			packageProductDependencies = (
-				A10000000000000000000061 /* ZipArchive */,
+				A10000000000000000000061 /* ZIPFoundation */,
 			);
 			productName = RPGPlayer;
 			productReference = A10000000000000000000010 /* RPGPlayer.app */;
@@ -137,7 +137,7 @@
 			);
 			mainGroup = A10000000000000000000002;
 			packageReferences = (
-				A10000000000000000000060 /* XCRemoteSwiftPackageReference "ZipArchive" */,
+				A10000000000000000000060 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 			);
 			productRefGroup = A10000000000000000000003 /* Products */;
 			projectDirPath = "";
@@ -180,7 +180,7 @@
 		A10000000000000000000053 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -189,7 +189,7 @@
 		A10000000000000000000054 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -204,7 +204,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -229,7 +229,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -270,21 +270,21 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		A10000000000000000000060 /* XCRemoteSwiftPackageReference "ZipArchive" */ = {
+		A10000000000000000000060 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ZipArchive/ZipArchive";
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 2.6.0;
+				minimumVersion = 0.9.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		A10000000000000000000061 /* ZipArchive */ = {
+		A10000000000000000000061 /* ZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = A10000000000000000000060 /* XCRemoteSwiftPackageReference "ZipArchive" */;
-			productName = ZipArchive;
+			package = A10000000000000000000060 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

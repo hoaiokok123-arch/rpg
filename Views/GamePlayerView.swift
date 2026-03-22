@@ -253,21 +253,11 @@ private struct GameWebView: UIViewRepresentable {
     @ObservedObject var bridge: WebBridge
 
     private let preLoadCompatibilityScript = """
-    // Gia lap moi truong NW.js ma RPG Maker MV can
-    window.nw = {};
-    window.require = function() { return {}; };
-    window.process = { versions: { node: '1.0.0' } };
-
     // Fix focus
     window.focus = function() {};
     window.top = window;
     document.hasFocus = function() { return true; };
     window.document.hasFocus = function() { return true; };
-
-    // Fix SceneManager
-    if (typeof SceneManager !== 'undefined') {
-        SceneManager.isGameActive = function() { return true; };
-    }
 
     // Fix sau khi page load xong
     window.addEventListener('load', function() {
@@ -276,21 +266,21 @@ private struct GameWebView: UIViewRepresentable {
         }
         if (typeof Utils !== 'undefined') {
             Utils.isNwjs = function() { return false; };
-            Utils.isOptionValid = function() { return false; };
+            Utils.isOptionValid = function(name) { return false; };
         }
         if (typeof Graphics !== 'undefined') {
             Graphics.printError = function(name, msg) {
-                console.error(name + ': ' + msg);
+                console.error('[RPG Error] ' + name + ': ' + msg);
             };
         }
-    });
-
-    // Fix AudioContext iOS
-    window.addEventListener('touchstart', function() {
-        if (typeof WebAudio !== 'undefined' && WebAudio._context) {
-            WebAudio._context.resume();
+        if (typeof WebAudio !== 'undefined') {
+            document.addEventListener('touchstart', function() {
+                if (WebAudio._context && WebAudio._context.state === 'suspended') {
+                    WebAudio._context.resume();
+                }
+            }, { once: true });
         }
-    }, { once: true });
+    }, false);
     """
 
     func makeCoordinator() -> Coordinator {

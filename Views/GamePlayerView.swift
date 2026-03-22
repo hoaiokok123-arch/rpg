@@ -253,63 +253,44 @@ private struct GameWebView: UIViewRepresentable {
     @ObservedObject var bridge: WebBridge
 
     private let preLoadCompatibilityScript = """
-    (function() {
-      function patchSceneManager() {
-        if (typeof window.SceneManager !== 'undefined') {
-          window.SceneManager.isGameActive = function() { return true; };
-          return true;
+    // Gia lap moi truong NW.js ma RPG Maker MV can
+    window.nw = {};
+    window.require = function() { return {}; };
+    window.process = { versions: { node: '1.0.0' } };
+
+    // Fix focus
+    window.focus = function() {};
+    window.top = window;
+    document.hasFocus = function() { return true; };
+    window.document.hasFocus = function() { return true; };
+
+    // Fix SceneManager
+    if (typeof SceneManager !== 'undefined') {
+        SceneManager.isGameActive = function() { return true; };
+    }
+
+    // Fix sau khi page load xong
+    window.addEventListener('load', function() {
+        if (typeof SceneManager !== 'undefined') {
+            SceneManager.isGameActive = function() { return true; };
         }
-        return false;
-      }
-
-      patchSceneManager();
-      var patchTimer = setInterval(function() {
-        if (patchSceneManager()) {
-          clearInterval(patchTimer);
+        if (typeof Utils !== 'undefined') {
+            Utils.isNwjs = function() { return false; };
+            Utils.isOptionValid = function() { return false; };
         }
-      }, 50);
-      window.addEventListener('load', function() {
-        patchSceneManager();
-        clearInterval(patchTimer);
-      }, { once: true });
-
-      if (typeof AudioContext !== 'undefined') {
-        var _origAudio = AudioContext;
-        AudioContext = function() {
-          var ctx = new _origAudio();
-          document.addEventListener('touchstart', function() {
-            if (ctx.state === 'suspended') ctx.resume();
-          }, { once: true });
-          return ctx;
-        };
-      }
-
-      window.focus = function() {};
-      document.hasFocus = function() { return true; };
-
-      if (typeof Graphics !== 'undefined') {
-        Graphics.printError = function(name, message) {
-          console.error(name + ': ' + message);
-        };
-      } else {
-        var setGraphicsPatch = setInterval(function() {
-          if (typeof Graphics !== 'undefined') {
-            Graphics.printError = function(name, message) {
-              console.error(name + ': ' + message);
+        if (typeof Graphics !== 'undefined') {
+            Graphics.printError = function(name, msg) {
+                console.error(name + ': ' + msg);
             };
-            clearInterval(setGraphicsPatch);
-          }
-        }, 50);
-        window.addEventListener('load', function() {
-          if (typeof Graphics !== 'undefined') {
-            Graphics.printError = function(name, message) {
-              console.error(name + ': ' + message);
-            };
-          }
-          clearInterval(setGraphicsPatch);
-        }, { once: true });
-      }
-    })();
+        }
+    });
+
+    // Fix AudioContext iOS
+    window.addEventListener('touchstart', function() {
+        if (typeof WebAudio !== 'undefined' && WebAudio._context) {
+            WebAudio._context.resume();
+        }
+    }, { once: true });
     """
 
     func makeCoordinator() -> Coordinator {

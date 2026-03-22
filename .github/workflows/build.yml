@@ -33,6 +33,7 @@ jobs:
       - name: Create IPA manually
         run: |
           rm -rf Payload
+          rm -f RPGPlayer.ipa
           mkdir -p Payload
           APP_PATH="build/Build/Products/Release-iphoneos/RPGPlayer.app"
           if [ ! -d "$APP_PATH" ]; then
@@ -45,8 +46,11 @@ jobs:
             /usr/libexec/PlistBuddy -c "Print" "$APP_PATH/Info.plist" || true
             exit 1
           fi
+          chmod 755 "$APP_PATH/$EXECUTABLE_NAME"
+          file "$APP_PATH/$EXECUTABLE_NAME"
           cp -r "$APP_PATH" Payload/
-          zip -r RPGPlayer.ipa Payload/
+          ditto -c -k --sequesterRsrc --keepParent Payload RPGPlayer.ipa
+          unzip -l RPGPlayer.ipa | sed -n '1,60p'
 
       - name: Upload RPGPlayer.ipa artifact
         uses: actions/upload-artifact@v4

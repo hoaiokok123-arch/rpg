@@ -3,11 +3,14 @@ import ZIPFoundation
 
 enum GameImporterError: LocalizedError {
     case unzipFailed
+    case invalidGameStructure
 
     var errorDescription: String? {
         switch self {
         case .unzipFailed:
             return "Khong the giai nen file ZIP."
+        case .invalidGameStructure:
+            return "Khong tim thay cau truc game hop le (www/index.html)."
         }
     }
 }
@@ -38,12 +41,15 @@ enum GameImporter {
             throw GameImporterError.unzipFailed
         }
 
-        let detection = GameDetector.detectGame(at: destinationFolderURL)
+        let gameRootURL = try locateGameRoot(in: destinationFolderURL)
+        try normalizeExtractedGame(at: gameRootURL)
+
+        let detection = GameDetector.detectGame(at: gameRootURL)
         let gameName = detection.title ?? gameFolderName
         return Game(
-            id: Game.stableID(for: destinationFolderURL.path),
+            id: Game.stableID(for: gameRootURL.path),
             name: gameName,
-            path: destinationFolderURL.path,
+            path: gameRootURL.path,
             version: detection.version
         )
     }
@@ -97,5 +103,202 @@ enum GameImporter {
         }
 
         return gamesURL
+    }
+
+    private static func locateGameRoot(in extractedDirectoryURL: URL) throws -> URL {
+        let fileManager = FileManager.default
+
+        func hasIndex(in root: URL) -> Bool {
+            let indexURL = root
+                .appendingPathComponent("www", isDirectory: true)
+                .appendingPathComponent("index.html")
+            return fileManager.fileExists(atPath: indexURL.path)
+        }
+
+        if hasIndex(in: extractedDirectoryURL) {
+            return extractedDirectoryURL
+        }
+
+        guard let enumerator = fileManager.enumerator(
+            at: extractedDirectoryURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            throw GameImporterError.invalidGameStructure
+        }
+
+        while let candidate = enumerator.nextObject() as? URL {
+            let values = try? candidate.resourceValues(forKeys: [.isDirectoryKey])
+            guard values?.isDirectory == true else {
+                continue
+            }
+
+            if hasIndex(in: candidate) {
+                return candidate
+            }
+        }
+
+        throw GameImporterError.invalidGameStructure
+    }
+
+    private static func normalizeExtractedGame(at gameRootURL: URL) throws {
+        let fileManager = FileManager.default
+        let wwwURL = gameRootURL.appendingPathComponent("www", isDirectory: true)
+        guard fileManager.fileExists(atPath: wwwURL.path) else {
+            return
+        }
+
+        try normalizeDirectoryName(at: wwwURL, expectedName: "data")
+        try normalizeDirectoryName(at: wwwURL, expectedName: "js")
+        try normalizeDirectoryName(at: wwwURL, expectedName: "img")
+        try normalizeDirectoryName(at: wwwURL, expectedName: "audio")
+        try normalizeDirectoryName(at: wwwURL, expectedName: "fonts")
+
+        try normalizeMVDataFiles(at: wwwURL.appendingPathComponent("data", isDirectory: true))
+        try normalizeMVPluginFiles(at: wwwURL)
+    }
+
+    private static func normalizeDirectoryName(at parentURL: URL, expectedName: String) throws {
+        let fileManager = FileManager.default
+        let expectedURL = parentURL.appendingPathComponent(expectedName, isDirectory: true)
+        if fileManager.fileExists(atPath: expectedURL.path) {
+            return
+        }
+
+        guard
+            let entries = try? fileManager.contentsOfDirectory(
+                at: parentURL,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+        else {
+            return
+        }
+
+        guard let match = entries.first(where: {
+            $0.lastPathComponent.caseInsensitiveCompare(expectedName) == .orderedSame &&
+            ((try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true)
+        }) else {
+            return
+        }
+
+        try fileManager.moveItem(at: match, to: expectedURL)
+    }
+
+    private static func normalizeMVDataFiles(at dataDirectoryURL: URL) throws {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: dataDirectoryURL.path) else {
+            return
+        }
+
+        let expectedDatabaseFiles = [
+            "Actors.json",
+            "Classes.json",
+            "Skills.json",
+            "Items.json",
+            "Weapons.json",
+            "Armors.json",
+            "Enemies.json",
+            "Troops.json",
+            "States.json",
+            "Animations.json",
+            "Tilesets.json",
+            "CommonEvents.json",
+            "System.json",
+            "MapInfos.json"
+        ]
+
+        for fileName in expectedDatabaseFiles {
+            try ensureFileExistsWithExpectedCase(fileName, in: dataDirectoryURL)
+        }
+
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: dataDirectoryURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+
+        for entryURL in entries {
+            guard entryURL.pathExtension.lowercased() == "json" else {
+                continue
+            }
+
+            let name = entryURL.lastPathComponent
+            let lowercased = name.lowercased()
+            guard lowercased.hasPrefix("map"), lowercased.hasSuffix(".json") else {
+                continue
+            }
+
+            let digits = String(lowercased.dropFirst(3).dropLast(5))
+            guard digits.count == 3, digits.allSatisfy({ $0.isNumber }) else {
+                continue
+            }
+
+            let canonicalName = "Map\(digits).json"
+            let canonicalURL = dataDirectoryURL.appendingPathComponent(canonicalName)
+            if !fileManager.fileExists(atPath: canonicalURL.path) {
+                try fileManager.copyItem(at: entryURL, to: canonicalURL)
+            }
+        }
+    }
+
+    private static func normalizeMVPluginFiles(at wwwURL: URL) throws {
+        let fileManager = FileManager.default
+        let pluginsJSURL = wwwURL
+            .appendingPathComponent("js", isDirectory: true)
+            .appendingPathComponent("plugins.js")
+        let pluginsDirectoryURL = wwwURL
+            .appendingPathComponent("js", isDirectory: true)
+            .appendingPathComponent("plugins", isDirectory: true)
+
+        guard
+            fileManager.fileExists(atPath: pluginsJSURL.path),
+            fileManager.fileExists(atPath: pluginsDirectoryURL.path),
+            let content = try? String(contentsOf: pluginsJSURL, encoding: .utf8)
+        else {
+            return
+        }
+
+        let regex = try NSRegularExpression(pattern: "\"name\"\\s*:\\s*\"([^\"]+)\"")
+        let nsContent = content as NSString
+        let matches = regex.matches(in: content, range: NSRange(location: 0, length: nsContent.length))
+
+        let pluginNames = Set(matches.compactMap { match -> String? in
+            guard match.numberOfRanges >= 2 else {
+                return nil
+            }
+            let name = nsContent.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return name.isEmpty ? nil : name
+        })
+
+        for pluginName in pluginNames {
+            try ensureFileExistsWithExpectedCase("\(pluginName).js", in: pluginsDirectoryURL)
+        }
+    }
+
+    private static func ensureFileExistsWithExpectedCase(_ expectedName: String, in directoryURL: URL) throws {
+        let fileManager = FileManager.default
+        let expectedURL = directoryURL.appendingPathComponent(expectedName)
+        if fileManager.fileExists(atPath: expectedURL.path) {
+            return
+        }
+
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+
+        guard let match = entries.first(where: {
+            $0.lastPathComponent.caseInsensitiveCompare(expectedName) == .orderedSame
+        }) else {
+            return
+        }
+
+        try fileManager.copyItem(at: match, to: expectedURL)
     }
 }

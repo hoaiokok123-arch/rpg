@@ -317,6 +317,7 @@ private struct GameWebView: UIViewRepresentable {
             self.bridge = bridge
         }
 
+        @MainActor
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             bridge?.didFinishPageLoad()
         }
@@ -370,8 +371,8 @@ private final class WebBridge: ObservableObject {
 
     func startFPSMonitoring() {
         stopFPSMonitoring()
-        fpsTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        fpsTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            Task { @MainActor [weak self] in
                 self?.pollFPS()
             }
         }
@@ -385,8 +386,8 @@ private final class WebBridge: ObservableObject {
 
     func startAutoSave() {
         stopAutoSave()
-        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        autoSaveTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true) { _ in
+            Task { @MainActor [weak self] in
                 self?.persistSaveData()
             }
         }
@@ -646,7 +647,7 @@ private enum PhotoSaver {
             throw PhotoSaveError.denied
         }
 
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             PHPhotoLibrary.shared().performChanges({
                 PHAssetChangeRequest.creationRequestForAsset(from: image)
             }) { success, error in

@@ -1,0 +1,43 @@
+name: Build RPGPlayer IPA
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve SPM packages
+        run: xcodebuild -resolvePackageDependencies -scheme RPGPlayer
+
+      - name: Build iOS app (unsigned)
+        run: |
+          xcodebuild \
+            -scheme RPGPlayer \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_IDENTITY="" \
+            SYMROOT=build \
+            build
+
+      - name: Create IPA manually
+        run: |
+          mkdir -p Payload
+          cp -r build/Release-iphoneos/RPGPlayer.app Payload/
+          zip -r RPGPlayer.ipa Payload/
+
+      - name: Upload RPGPlayer.ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RPGPlayer-ipa
+          path: RPGPlayer.ipa
+          if-no-files-found: error

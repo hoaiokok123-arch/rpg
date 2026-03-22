@@ -75,8 +75,6 @@ enum GameImporter {
             }
 
             let gameRootURL = (try? locateGameRoot(in: url)) ?? url
-            try? normalizeExtractedGame(at: gameRootURL)
-            patchGameFiles(at: gameRootURL)
 
             let detection = GameDetector.detectGame(at: gameRootURL)
             let gameName = detection.title ?? gameRootURL.lastPathComponent
@@ -309,42 +307,66 @@ enum GameImporter {
 
     private static func patchGameFiles(at gameFolderURL: URL) {
         let fileManager = FileManager.default
-        let jsDirectoryURL = gameFolderURL
-            .appendingPathComponent("www", isDirectory: true)
-            .appendingPathComponent("js", isDirectory: true)
+        let jsURL = gameFolderURL
+            .appendingPathComponent("www")
+            .appendingPathComponent("js")
 
-        let filesToPatch = [
-            "rpg_managers.js",  // MV
-            "rmmz_managers.js"  // MZ
-        ]
+        let targets = ["rpg_managers.js", "rmmz_managers.js"]
 
-        for fileName in filesToPatch {
-            let fileURL = jsDirectoryURL.appendingPathComponent(fileName)
-            guard
-                fileManager.fileExists(atPath: fileURL.path),
-                var content = try? String(contentsOf: fileURL, encoding: .utf8)
-            else {
-                continue
+        for fileName in targets {
+            let fileURL = jsURL.appendingPathComponent(fileName)
+            guard fileManager.fileExists(atPath: fileURL.path),
+                  var src = try? String(contentsOf: fileURL, encoding: .utf8)
+            else { continue }
+
+            // Danh dau da patch roi thi bo qua
+            guard !src.contains("/* RPGPlayer-iOS-patched */") else { continue }
+
+            let original = src
+
+            // Patch 1: SceneManager.isGameActive
+            // Dung range-based replace de tranh regex lazy match bug
+            if let start = src.range(of: "SceneManager.isGameActive = function()"),
+               let openBrace = src[start.upperBound...].firstIndex(of: "{") {
+                var depth = 0
+                var idx = openBrace
+                while idx < src.endIndex {
+                    if src[idx] == "{" { depth += 1 }
+                    else if src[idx] == "}" {
+                        depth -= 1
+                        if depth == 0 {
+                            // idx la vi tri } cuoi cung cua function
+                            let endIdx = src.index(after: idx)
+                            // check xem co ; khong
+                            let afterClose = src[endIdx...].prefix(1)
+                            let replaceEnd = afterClose == ";" ? src.index(after: endIdx) : endIdx
+                            let fullRange = start.lowerBound..<replaceEnd
+                            src.replaceSubrange(fullRange,
+                                with: "SceneManager.isGameActive = function() { return true; /* RPGPlayer-iOS-patched */ };")
+                            break
+                        }
+                    }
+                    idx = src.index(after: idx)
+                }
             }
 
-            let originalContent = content
-
-            // Patch 1: SceneManager.isGameActive - always true
-            content = content.replacingOccurrences(
-                of: #"SceneManager\.isGameActive\s*=\s*function\s*\(\)\s*\{[\s\S]*?\};"#,
-                with: "SceneManager.isGameActive = function() { return true; /* iOS patch */ };",
+            // Patch 2: Utils.isNwjs - function don gian khong co nested braces
+            src = src.replacingOccurrences(
+                of: #"Utils\.isNwjs\s*=\s*function\s*\(\s*\)\s*\{[^}]*\};"#,
+                with: "Utils.isNwjs = function() { return false; /* RPGPlayer-iOS-patched */ };",
                 options: .regularExpression
             )
 
-            // Patch 2: Utils.isNwjs - always false
-            content = content.replacingOccurrences(
-                of: #"Utils\.isNwjs\s*=\s*function\s*\(\)\s*\{[\s\S]*?\};"#,
-                with: "Utils.isNwjs = function() { return false; /* iOS patch */ };",
+            // Patch 3: Graphics.printError - tat error popup
+            src = src.replacingOccurrences(
+                of: #"Graphics\.printError\s*=\s*function\s*\([^)]*\)\s*\{[^}]*\};"#,
+                with: "Graphics.printError = function(name, msg) { console.error('[RPG]', name, msg); /* RPGPlayer-iOS-patched */ };",
                 options: .regularExpression
             )
 
-            if content != originalContent {
-                try? content.write(to: fileURL, atomically: true, encoding: .utf8)
+            if src != original {
+                try? src.write(to: fileURL, atomically: true, encoding: .utf8)
+                print("[Patcher] Patched \(fileName)")
             }
         }
     }

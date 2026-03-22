@@ -13,15 +13,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install XcodeGen
-        run: |
-          if ! command -v xcodegen >/dev/null 2>&1; then
-            brew install xcodegen
-          fi
-
-      - name: Generate Xcode project
-        run: xcodegen generate
-
       - name: Resolve SPM packages
         run: xcodebuild -resolvePackageDependencies -project RPGPlayer.xcodeproj -scheme RPGPlayer
 

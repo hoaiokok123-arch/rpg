@@ -13,6 +13,7 @@ struct GamePlayerView: View {
     @StateObject private var webBridge: WebBridge
 
     @State private var showFPS = true
+    @State private var showLog = false
     @State private var feedbackMessage = ""
     @State private var showFeedback = false
 
@@ -62,6 +63,9 @@ struct GamePlayerView: View {
         .alert(feedbackMessage, isPresented: $showFeedback) {
             Button("OK", role: .cancel) {}
         }
+        .sheet(isPresented: $showLog) {
+            LogOverlayView(bridge: webBridge)
+        }
     }
 
     private var topBar: some View {
@@ -85,6 +89,17 @@ struct GamePlayerView: View {
                 }
             } label: {
                 Image(systemName: "camera")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(Color.black.opacity(0.75))
+                    .clipShape(Circle())
+            }
+
+            Button {
+                showLog = true
+            } label: {
+                Image(systemName: "terminal")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 30, height: 30)
@@ -252,6 +267,28 @@ private struct GameWebView: UIViewRepresentable {
     let game: Game
     @ObservedObject var bridge: WebBridge
 
+    private let consoleCaptureScript = """
+    (function() {
+      var _log = console.log.bind(console);
+      var _warn = console.warn.bind(console);
+      var _error = console.error.bind(console);
+      function send(level, args) {
+        var msg = Array.from(args).map(function(a) {
+          try { return typeof a === 'object' ? JSON.stringify(a) : String(a); }
+          catch(e) { return String(a); }
+        }).join(' ');
+        window.webkit.messageHandlers.consoleLog.postMessage({ level: level, message: msg });
+      }
+      console.log   = function() { _log.apply(console, arguments);   send('log',   arguments); };
+      console.warn  = function() { _warn.apply(console, arguments);  send('warn',  arguments); };
+      console.error = function() { _error.apply(console, arguments); send('error', arguments); };
+      window.onerror = function(msg, src, line, col, err) {
+        send('error', ['[onerror] ' + msg + ' @ ' + src + ':' + line]);
+        return false;
+      };
+    })();
+    """
+
     private let preLoadCompatibilityScript = """
     // Fix focus
     window.focus = function() {};
@@ -304,6 +341,14 @@ private struct GameWebView: UIViewRepresentable {
         }
 
         let userContentController = WKUserContentController()
+        userContentController.add(context.coordinator, name: "consoleLog")
+        userContentController.addUserScript(
+            WKUserScript(
+                source: consoleCaptureScript,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
         userContentController.addUserScript(
             WKUserScript(
                 source: preLoadCompatibilityScript,
@@ -351,7 +396,12 @@ private struct GameWebView: UIViewRepresentable {
         bridge.webView = uiView
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "consoleLog")
+        uiView.navigationDelegate = nil
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         private weak var bridge: WebBridge?
 
         init(bridge: WebBridge) {
@@ -362,13 +412,36 @@ private struct GameWebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             bridge?.didFinishPageLoad()
         }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard
+                message.name == "consoleLog",
+                let payload = message.body as? [String: Any],
+                let level = payload["level"] as? String,
+                let text = payload["message"] as? String
+            else {
+                return
+            }
+
+            Task { @MainActor [weak bridge] in
+                bridge?.appendLog(level: level, message: text)
+            }
+        }
     }
 }
 
 @MainActor
 private final class WebBridge: ObservableObject {
+    struct ConsoleEntry: Identifiable {
+        let id = UUID()
+        let level: String
+        let message: String
+        let time: Date
+    }
+
     weak var webView: WKWebView?
     @Published var fps: Int = 0
+    @Published var consoleLogs: [ConsoleEntry] = []
 
     private let game: Game
     private var fpsTimer: Timer?
@@ -376,6 +449,17 @@ private final class WebBridge: ObservableObject {
 
     init(game: Game) {
         self.game = game
+    }
+
+    func appendLog(level: String, message: String) {
+        consoleLogs.append(ConsoleEntry(level: level, message: message, time: Date()))
+        if consoleLogs.count > 200 {
+            consoleLogs.removeFirst(consoleLogs.count - 200)
+        }
+    }
+
+    func clearLogs() {
+        consoleLogs.removeAll()
     }
 
     func didFinishPageLoad() {
@@ -512,6 +596,139 @@ private final class WebBridge: ObservableObject {
                     self.fps = 0
                 }
             }
+        }
+    }
+}
+
+private struct LogOverlayView: View {
+    @ObservedObject var bridge: WebBridge
+    @Environment(\.dismiss) private var dismiss
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.88)
+                .ignoresSafeArea()
+
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    Text("Console")
+                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.white)
+
+                    Spacer()
+
+                    Button("Copy All") {
+                        let lines = bridge.consoleLogs.map { entry in
+                            let time = Self.timeFormatter.string(from: entry.time)
+                            return "[\(time)] [\(entry.level.uppercased())] \(entry.message)"
+                        }
+                        UIPasteboard.general.string = lines.joined(separator: "\n")
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+
+                    Button("Xoa") {
+                        bridge.clearLogs()
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.white)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+
+                Divider()
+                    .background(Color.white.opacity(0.2))
+
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 6) {
+                            ForEach(bridge.consoleLogs) { entry in
+                                logRow(entry)
+                                    .id(entry.id)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                    }
+                    .onAppear {
+                        scrollToBottom(proxy)
+                    }
+                    .onChange(of: bridge.consoleLogs.count) { _ in
+                        scrollToBottom(proxy)
+                    }
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        guard let lastID = bridge.consoleLogs.last?.id else {
+            return
+        }
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.12)) {
+                proxy.scrollTo(lastID, anchor: .bottom)
+            }
+        }
+    }
+
+    private func logRow(_ entry: WebBridge.ConsoleEntry) -> some View {
+        let color = colorForLevel(entry.level)
+        let time = Self.timeFormatter.string(from: entry.time)
+
+        return HStack(alignment: .top, spacing: 6) {
+            Text("[\(time)]")
+                .foregroundColor(.gray)
+
+            Image(systemName: iconForLevel(entry.level))
+                .foregroundColor(color)
+
+            Text(entry.level.uppercased())
+                .foregroundColor(color)
+                .fontWeight(.semibold)
+
+            Text(entry.message)
+                .foregroundColor(color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .font(.system(size: 11, weight: .regular, design: .monospaced))
+    }
+
+    private func iconForLevel(_ level: String) -> String {
+        switch level.lowercased() {
+        case "error":
+            return "xmark.octagon.fill"
+        case "warn":
+            return "exclamationmark.triangle.fill"
+        default:
+            return "info.circle.fill"
+        }
+    }
+
+    private func colorForLevel(_ level: String) -> Color {
+        switch level.lowercased() {
+        case "error":
+            return .red
+        case "warn":
+            return .yellow
+        default:
+            return .primary
         }
     }
 }

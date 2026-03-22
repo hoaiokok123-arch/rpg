@@ -311,63 +311,79 @@ enum GameImporter {
             .appendingPathComponent("www")
             .appendingPathComponent("js")
 
-        let targets = ["rpg_managers.js", "rmmz_managers.js"]
+        // Patch chen vao dau rpg_managers.js (MV) va rmmz_managers.js (MZ)
+        let managersPatch = """
+        /* RPGPlayer-iOS-patch-start */
+        (function() {
+            var _origDefine = Object.defineProperty.bind(Object);
+            // Override SceneManager.isGameActive ngay khi no duoc dinh nghia
+            var _check = setInterval(function() {
+                if (typeof SceneManager !== 'undefined') {
+                    SceneManager.isGameActive = function() { return true; };
+                    clearInterval(_check);
+                }
+            }, 1);
+            // Override Utils.isNwjs
+            var _check2 = setInterval(function() {
+                if (typeof Utils !== 'undefined') {
+                    Utils.isNwjs = function() { return false; };
+                    clearInterval(_check2);
+                }
+            }, 1);
+            // Override Graphics.printError - tat crash popup
+            var _check3 = setInterval(function() {
+                if (typeof Graphics !== 'undefined') {
+                    Graphics.printError = function(name, msg) {
+                        console.error('[RPG Error] ' + name + ': ' + msg);
+                    };
+                    clearInterval(_check3);
+                }
+            }, 1);
+        })();
+        /* RPGPlayer-iOS-patch-end */
 
-        for fileName in targets {
+        """
+
+        // Patch them vao dau plugins MAC_High_Hz_Fixes.js vi plugin nay
+        // override requestAnimationFrame gay crash tren iOS
+        let macHighHzPatch = """
+        /* RPGPlayer-iOS-patch-start */
+        // Disable MAC_High_Hz_Fixes tren iOS vi gay crash
+        if (typeof window !== 'undefined') {
+            window.__rpgPlayerDisableMacFix = true;
+        }
+        /* RPGPlayer-iOS-patch-end */
+
+        """
+
+        let targets: [(file: String, patch: String)] = [
+            ("rpg_managers.js", managersPatch),
+            ("rmmz_managers.js", managersPatch),
+        ]
+
+        for (fileName, patch) in targets {
             let fileURL = jsURL.appendingPathComponent(fileName)
             guard fileManager.fileExists(atPath: fileURL.path),
-                  var src = try? String(contentsOf: fileURL, encoding: .utf8)
+                  let original = try? String(contentsOf: fileURL, encoding: .utf8)
             else { continue }
 
-            // Danh dau da patch roi thi bo qua
-            guard !src.contains("/* RPGPlayer-iOS-patched */") else { continue }
+            // Bo qua neu da patch
+            guard !original.hasPrefix("/* RPGPlayer-iOS-patch-start */") else { continue }
 
-            let original = src
+            let patched = patch + original
+            try? patched.write(to: fileURL, atomically: true, encoding: .utf8)
+            print("[Patcher] Prepended patch to \(fileName)")
+        }
 
-            // Patch 1: SceneManager.isGameActive
-            // Dung range-based replace de tranh regex lazy match bug
-            if let start = src.range(of: "SceneManager.isGameActive = function()"),
-               let openBrace = src[start.upperBound...].firstIndex(of: "{") {
-                var depth = 0
-                var idx = openBrace
-                while idx < src.endIndex {
-                    if src[idx] == "{" { depth += 1 }
-                    else if src[idx] == "}" {
-                        depth -= 1
-                        if depth == 0 {
-                            // idx la vi tri } cuoi cung cua function
-                            let endIdx = src.index(after: idx)
-                            // check xem co ; khong
-                            let afterClose = src[endIdx...].prefix(1)
-                            let replaceEnd = afterClose == ";" ? src.index(after: endIdx) : endIdx
-                            let fullRange = start.lowerBound..<replaceEnd
-                            src.replaceSubrange(fullRange,
-                                with: "SceneManager.isGameActive = function() { return true; /* RPGPlayer-iOS-patched */ };")
-                            break
-                        }
-                    }
-                    idx = src.index(after: idx)
-                }
-            }
-
-            // Patch 2: Utils.isNwjs - function don gian khong co nested braces
-            src = src.replacingOccurrences(
-                of: #"Utils\.isNwjs\s*=\s*function\s*\(\s*\)\s*\{[^}]*\};"#,
-                with: "Utils.isNwjs = function() { return false; /* RPGPlayer-iOS-patched */ };",
-                options: .regularExpression
-            )
-
-            // Patch 3: Graphics.printError - tat error popup
-            src = src.replacingOccurrences(
-                of: #"Graphics\.printError\s*=\s*function\s*\([^)]*\)\s*\{[^}]*\};"#,
-                with: "Graphics.printError = function(name, msg) { console.error('[RPG]', name, msg); /* RPGPlayer-iOS-patched */ };",
-                options: .regularExpression
-            )
-
-            if src != original {
-                try? src.write(to: fileURL, atomically: true, encoding: .utf8)
-                print("[Patcher] Patched \(fileName)")
-            }
+        // Patch MAC_High_Hz_Fixes.js neu co
+        let pluginsURL = jsURL.appendingPathComponent("plugins")
+        let macFixURL = pluginsURL.appendingPathComponent("MAC_High_Hz_Fixes.js")
+        if fileManager.fileExists(atPath: macFixURL.path),
+           let original = try? String(contentsOf: macFixURL, encoding: .utf8),
+           !original.hasPrefix("/* RPGPlayer-iOS-patch-start */") {
+            let patched = macHighHzPatch + original
+            try? patched.write(to: macFixURL, atomically: true, encoding: .utf8)
+            print("[Patcher] Patched MAC_High_Hz_Fixes.js")
         }
     }
 }

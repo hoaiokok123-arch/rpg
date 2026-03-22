@@ -23,7 +23,7 @@ targets:
       base:
         PRODUCT_NAME: RPGPlayer
         PRODUCT_BUNDLE_IDENTIFIER: com.hoai90213.rpgplayer
-        IPHONEOS_DEPLOYMENT_TARGET: 14.0
+        IPHONEOS_DEPLOYMENT_TARGET: 15.0
         SWIFT_VERSION: 5.0
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: Info.plist

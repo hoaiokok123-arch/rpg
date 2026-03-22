@@ -43,6 +43,7 @@ enum GameImporter {
 
         let gameRootURL = try locateGameRoot(in: destinationFolderURL)
         try normalizeExtractedGame(at: gameRootURL)
+        patchGameFiles(at: gameRootURL)
 
         let detection = GameDetector.detectGame(at: gameRootURL)
         let gameName = detection.title ?? gameFolderName
@@ -75,6 +76,7 @@ enum GameImporter {
 
             let gameRootURL = (try? locateGameRoot(in: url)) ?? url
             try? normalizeExtractedGame(at: gameRootURL)
+            patchGameFiles(at: gameRootURL)
 
             let detection = GameDetector.detectGame(at: gameRootURL)
             let gameName = detection.title ?? gameRootURL.lastPathComponent
@@ -303,5 +305,47 @@ enum GameImporter {
         }
 
         try fileManager.copyItem(at: match, to: expectedURL)
+    }
+
+    private static func patchGameFiles(at gameFolderURL: URL) {
+        let fileManager = FileManager.default
+        let jsDirectoryURL = gameFolderURL
+            .appendingPathComponent("www", isDirectory: true)
+            .appendingPathComponent("js", isDirectory: true)
+
+        let filesToPatch = [
+            "rpg_managers.js",  // MV
+            "rmmz_managers.js"  // MZ
+        ]
+
+        for fileName in filesToPatch {
+            let fileURL = jsDirectoryURL.appendingPathComponent(fileName)
+            guard
+                fileManager.fileExists(atPath: fileURL.path),
+                var content = try? String(contentsOf: fileURL, encoding: .utf8)
+            else {
+                continue
+            }
+
+            let originalContent = content
+
+            // Patch 1: SceneManager.isGameActive - always true
+            content = content.replacingOccurrences(
+                of: #"SceneManager\.isGameActive\s*=\s*function\s*\(\)\s*\{[\s\S]*?\};"#,
+                with: "SceneManager.isGameActive = function() { return true; /* iOS patch */ };",
+                options: .regularExpression
+            )
+
+            // Patch 2: Utils.isNwjs - always false
+            content = content.replacingOccurrences(
+                of: #"Utils\.isNwjs\s*=\s*function\s*\(\)\s*\{[\s\S]*?\};"#,
+                with: "Utils.isNwjs = function() { return false; /* iOS patch */ };",
+                options: .regularExpression
+            )
+
+            if content != originalContent {
+                try? content.write(to: fileURL, atomically: true, encoding: .utf8)
+            }
+        }
     }
 }

@@ -653,7 +653,7 @@ private enum PhotoSaver {
                 if let error {
                     continuation.resume(throwing: error)
                 } else if success {
-                    continuation.resume()
+                    continuation.resume(returning: ())
                 } else {
                     continuation.resume(throwing: PhotoSaveError.failed)
                 }

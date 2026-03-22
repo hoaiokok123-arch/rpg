@@ -252,6 +252,66 @@ private struct GameWebView: UIViewRepresentable {
     let game: Game
     @ObservedObject var bridge: WebBridge
 
+    private let preLoadCompatibilityScript = """
+    (function() {
+      function patchSceneManager() {
+        if (typeof window.SceneManager !== 'undefined') {
+          window.SceneManager.isGameActive = function() { return true; };
+          return true;
+        }
+        return false;
+      }
+
+      patchSceneManager();
+      var patchTimer = setInterval(function() {
+        if (patchSceneManager()) {
+          clearInterval(patchTimer);
+        }
+      }, 50);
+      window.addEventListener('load', function() {
+        patchSceneManager();
+        clearInterval(patchTimer);
+      }, { once: true });
+
+      if (typeof AudioContext !== 'undefined') {
+        var _origAudio = AudioContext;
+        AudioContext = function() {
+          var ctx = new _origAudio();
+          document.addEventListener('touchstart', function() {
+            if (ctx.state === 'suspended') ctx.resume();
+          }, { once: true });
+          return ctx;
+        };
+      }
+
+      window.focus = function() {};
+      document.hasFocus = function() { return true; };
+
+      if (typeof Graphics !== 'undefined') {
+        Graphics.printError = function(name, message) {
+          console.error(name + ': ' + message);
+        };
+      } else {
+        var setGraphicsPatch = setInterval(function() {
+          if (typeof Graphics !== 'undefined') {
+            Graphics.printError = function(name, message) {
+              console.error(name + ': ' + message);
+            };
+            clearInterval(setGraphicsPatch);
+          }
+        }, 50);
+        window.addEventListener('load', function() {
+          if (typeof Graphics !== 'undefined') {
+            Graphics.printError = function(name, message) {
+              console.error(name + ': ' + message);
+            };
+          }
+          clearInterval(setGraphicsPatch);
+        }, { once: true });
+      }
+    })();
+    """
+
     func makeCoordinator() -> Coordinator {
         Coordinator(bridge: bridge)
     }
@@ -259,6 +319,9 @@ private struct GameWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.preferences.javaScriptEnabled = true
+        config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
         if config.preferences.responds(to: Selector(("setAllowFileAccess:"))) {
             config.preferences.setValue(true, forKey: "allowFileAccess")
         }
@@ -270,6 +333,13 @@ private struct GameWebView: UIViewRepresentable {
         }
 
         let userContentController = WKUserContentController()
+        userContentController.addUserScript(
+            WKUserScript(
+                source: preLoadCompatibilityScript,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
         if let restoreScript = GameSaveStore.restoreScript(for: game) {
             userContentController.addUserScript(
                 WKUserScript(
@@ -338,14 +408,6 @@ private final class WebBridge: ObservableObject {
     }
 
     func didFinishPageLoad() {
-        webView?.evaluateJavaScript(
-            """
-            if (typeof SceneManager !== "undefined") {
-              SceneManager.isGameActive = function() { return true; };
-            }
-            """,
-            completionHandler: nil
-        )
         setupFPSTrackerScript()
     }
 

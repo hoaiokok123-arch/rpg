@@ -73,12 +73,15 @@ enum GameImporter {
                 return nil
             }
 
-            let detection = GameDetector.detectGame(at: url)
-            let gameName = detection.title ?? url.lastPathComponent
+            let gameRootURL = (try? locateGameRoot(in: url)) ?? url
+            try? normalizeExtractedGame(at: gameRootURL)
+
+            let detection = GameDetector.detectGame(at: gameRootURL)
+            let gameName = detection.title ?? gameRootURL.lastPathComponent
             return Game(
-                id: Game.stableID(for: url.path),
+                id: Game.stableID(for: gameRootURL.path),
                 name: gameName,
-                path: url.path,
+                path: gameRootURL.path,
                 version: detection.version
             )
         }

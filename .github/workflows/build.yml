@@ -48,6 +48,7 @@ jobs:
           fi
           chmod 755 "$APP_PATH/$EXECUTABLE_NAME"
           file "$APP_PATH/$EXECUTABLE_NAME"
+          xcrun vtool -show-build "$APP_PATH/$EXECUTABLE_NAME" || true
           cp -r "$APP_PATH" Payload/
           ditto -c -k --sequesterRsrc --keepParent Payload RPGPlayer.ipa
           unzip -l RPGPlayer.ipa | sed -n '1,60p'
